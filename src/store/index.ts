@@ -11,7 +11,33 @@ const KEYS = {
   CONFIG: 'babygoo_config',
   ACTIVIDAD: 'babygoo_actividad',
   ADMIN_AUTH: 'babygoo_admin_auth',
+  CATEGORIAS: 'babygoo_categorias',
+  BANNERS: 'babygoo_banners',
+  ADMIN_CREDS: 'babygoo_admin_creds',
 } as const;
+
+const CATEGORIAS_DEFAULT = ['Niño', 'Niña', 'Unisex', 'Accesorios'];
+
+const BANNERS_DEFAULT: import('@/types').Banner[] = [
+  {
+    id: '1',
+    titulo: '¡Nueva Colección Primavera!',
+    subtitulo: 'Hasta 30% de descuento en mamelucos y conjuntos',
+    color: 'from-primary/90 to-secondary/80',
+  },
+  {
+    id: '2',
+    titulo: 'Recién Nacidos',
+    subtitulo: 'La ropa más suave para los más pequeños',
+    color: 'from-secondary/90 to-primary/80',
+  },
+  {
+    id: '3',
+    titulo: 'Envío Gratis',
+    subtitulo: 'En compras mayores a $999 MXN',
+    color: 'from-accent/90 to-primary/80',
+  },
+];
 
 const configInicial: ConfiguracionTienda = {
   nombreTienda: 'BabyGoo',
@@ -19,9 +45,59 @@ const configInicial: ConfiguracionTienda = {
   correo: 'contacto@babygoo.mx',
   whatsapp: 'https://wa.me/5841228655550',
   mensajeBienvenida: '¡Bienvenidos a BabyGoo! Ropa de bebé con amor.',
+  moneda: 'MXN',
 };
 
-// Helpers
+// ---- Categorías ----
+export function obtenerCategorias(): string[] {
+  const cats = leer<string[]>(KEYS.CATEGORIAS, []);
+  if (cats.length === 0) {
+    guardar(KEYS.CATEGORIAS, CATEGORIAS_DEFAULT);
+    return [...CATEGORIAS_DEFAULT];
+  }
+  return cats;
+}
+
+export function guardarCategorias(categorias: string[]) {
+  guardar(KEYS.CATEGORIAS, categorias);
+}
+
+export function agregarCategoria(nombre: string): boolean {
+  const cats = obtenerCategorias();
+  const normalizado = nombre.trim();
+  if (!normalizado || cats.some(c => c.toLowerCase() === normalizado.toLowerCase())) return false;
+  guardar(KEYS.CATEGORIAS, [...cats, normalizado]);
+  return true;
+}
+
+export function editarCategoria(original: string, nuevo: string): boolean {
+  const cats = obtenerCategorias();
+  const normalizado = nuevo.trim();
+  if (!normalizado) return false;
+  if (cats.some(c => c.toLowerCase() === normalizado.toLowerCase() && c !== original)) return false;
+  guardar(KEYS.CATEGORIAS, cats.map(c => c === original ? normalizado : c));
+  return true;
+}
+
+export function eliminarCategoria(nombre: string) {
+  guardar(KEYS.CATEGORIAS, obtenerCategorias().filter(c => c !== nombre));
+}
+
+// ---- Banners ----
+export function obtenerBanners() {
+  const banners = leer<import('@/types').Banner[]>(KEYS.BANNERS, []);
+  if (banners.length === 0) {
+    guardar(KEYS.BANNERS, BANNERS_DEFAULT);
+    return [...BANNERS_DEFAULT];
+  }
+  return banners;
+}
+
+export function guardarBanners(banners: import('@/types').Banner[]) {
+  guardar(KEYS.BANNERS, banners);
+}
+
+// ---- Helpers ----
 function leer<T>(key: string, fallback: T): T {
   try {
     const dato = localStorage.getItem(key);
@@ -135,6 +211,12 @@ export function guardarConfiguracion(config: ConfiguracionTienda) {
   agregarActividad('config', 'Configuración actualizada');
 }
 
+export function formatearMoneda(valor: number): string {
+  const config = obtenerConfiguracion();
+  const moneda = config.moneda || 'MXN';
+  return `$${valor.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${moneda}`;
+}
+
 // ---- Actividad ----
 export function obtenerActividad(): ActividadReciente[] {
   return leer<ActividadReciente[]>(KEYS.ACTIVIDAD, []);
@@ -152,10 +234,25 @@ function agregarActividad(tipo: ActividadReciente['tipo'], mensaje: string) {
 }
 
 // ---- Auth admin ----
-const ADMIN_CREDS = { usuario: 'admin', clave: 'babygoo2024' };
+const ADMIN_CREDS_DEFAULT = { usuario: 'juliojh26', clave: '1bdb0c1a' };
+
+export function obtenerCredencialesAdmin() {
+  return leer<{usuario: string, clave: string}>(KEYS.ADMIN_CREDS, ADMIN_CREDS_DEFAULT);
+}
+
+export function cambiarPasswordAdmin(nuevaClave: string) {
+  const creds = obtenerCredencialesAdmin();
+  guardar(KEYS.ADMIN_CREDS, { ...creds, clave: nuevaClave });
+}
+
+export function validarPasswordActual(clave: string) {
+  const creds = obtenerCredencialesAdmin();
+  return creds.clave === clave;
+}
 
 export function loginAdmin(usuario: string, clave: string): boolean {
-  if (usuario === ADMIN_CREDS.usuario && clave === ADMIN_CREDS.clave) {
+  const creds = obtenerCredencialesAdmin();
+  if (usuario === creds.usuario && clave === creds.clave) {
     guardar(KEYS.ADMIN_AUTH, true);
     return true;
   }

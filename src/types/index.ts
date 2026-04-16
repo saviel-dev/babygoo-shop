@@ -4,7 +4,7 @@
 
 export type Talla = 'RN' | '0-3M' | '3-6M' | '6-9M' | '9-12M' | '12-18M' | '18-24M' | '24M';
 
-export type Categoria = 'Niño' | 'Niña' | 'Unisex' | 'Accesorios';
+export type Categoria = string;
 
 export type EstadoPedido = 'Pendiente' | 'En proceso' | 'Cancelado' | 'Entregado';
 
@@ -53,6 +53,14 @@ export interface ConfiguracionTienda {
   correo: string;
   whatsapp: string;
   mensajeBienvenida: string;
+  moneda: string;
+}
+
+export interface Banner {
+  id: string;
+  titulo: string;
+  subtitulo: string;
+  color: string;
 }
 
 export interface ActividadReciente {

@@ -1,22 +1,22 @@
 import { useState, useMemo } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { Search, LayoutGrid, List } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Carrusel } from '@/components/Carrusel';
 import { TarjetaProducto } from '@/components/TarjetaProducto';
-import { obtenerProductosDisponibles } from '@/store';
+import { obtenerProductosDisponibles, obtenerCategorias } from '@/store';
 import { Categoria, VistaProducto } from '@/types';
 import { cn } from '@/lib/utils';
 
-const categorias: ('Todas' | Categoria)[] = ['Todas', 'Niño', 'Niña', 'Unisex', 'Accesorios'];
+
 
 export default function PaginaTienda() {
   const carrito = useOutletContext<{ agregar: (id: string) => void }>();
   const [busqueda, setBusqueda] = useState('');
   const [categoriaFiltro, setCategoriaFiltro] = useState<string>('Todas');
-  const [vista, setVista] = useState<VistaProducto>('grid');
+  const categorias = useMemo(() => ['Todas', ...obtenerCategorias()], []);
 
   const productos = useMemo(() => {
     let lista = obtenerProductosDisponibles();
@@ -54,14 +54,6 @@ export default function PaginaTienda() {
               ))}
             </SelectContent>
           </Select>
-          <div className="flex gap-1">
-            <Button variant={vista === 'grid' ? 'default' : 'outline'} size="icon" onClick={() => setVista('grid')}>
-              <LayoutGrid className="h-4 w-4" />
-            </Button>
-            <Button variant={vista === 'lista' ? 'default' : 'outline'} size="icon" onClick={() => setVista('lista')}>
-              <List className="h-4 w-4" />
-            </Button>
-          </div>
         </div>
 
         {/* Productos */}
@@ -70,16 +62,11 @@ export default function PaginaTienda() {
             <p className="text-lg">No se encontraron productos</p>
           </div>
         ) : (
-          <div className={cn(
-            vista === 'grid'
-              ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4'
-              : 'flex flex-col gap-3'
-          )}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {productos.map(p => (
               <TarjetaProducto
                 key={p.id}
                 producto={p}
-                vista={vista}
                 onAgregar={carrito.agregar}
               />
             ))}

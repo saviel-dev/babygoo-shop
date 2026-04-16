@@ -1,4 +1,5 @@
-import { Producto, VistaProducto } from '@/types';
+import { Producto } from '@/types';
+import { formatearMoneda } from '@/store';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ShoppingCart } from 'lucide-react';
@@ -6,37 +7,35 @@ import { cn } from '@/lib/utils';
 
 interface Props {
   producto: Producto;
-  vista: VistaProducto;
   onAgregar: (id: string) => void;
 }
 
-export function TarjetaProducto({ producto, vista, onAgregar }: Props) {
-  const esGrid = vista === 'grid';
-
+export function TarjetaProducto({ producto, onAgregar }: Props) {
   return (
-    <Card className={cn('overflow-hidden group transition-shadow hover:shadow-md', !esGrid && 'flex flex-row')}>
-      <div className={cn('overflow-hidden bg-muted', esGrid ? 'aspect-square' : 'w-40 shrink-0')}>
+    <Card className="group transition-all flex flex-col border-none hover:shadow-lg shadow-[0_4px_20px_rgba(0,0,0,0.06)] overflow-hidden">
+      <div className="flex items-center justify-center overflow-hidden bg-[#f8f9fa] aspect-square p-6">
         <img
           src={producto.imagen}
           alt={producto.nombre}
-          className="h-full w-full object-cover transition-transform group-hover:scale-105"
+          className="h-full w-full transition-transform group-hover:scale-105 drop-shadow-md object-contain mix-blend-multiply"
           loading="lazy"
         />
       </div>
-      <CardContent className={cn('flex flex-col justify-between gap-2', esGrid ? 'p-4' : 'p-4 flex-1')}>
-        <div>
-          <span className="text-[10px] uppercase font-semibold tracking-wider text-primary/70">{producto.categoria} · {producto.talla}</span>
-          <h3 className="font-semibold text-sm mt-1 leading-tight">{producto.nombre}</h3>
-          {!esGrid && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{producto.descripcion}</p>}
-        </div>
-        <div className="flex items-center justify-between mt-2">
-          <span className="text-lg font-bold text-primary">${producto.precio.toLocaleString('es-MX')} <span className="text-xs font-normal text-muted-foreground">MXN</span></span>
-          <Button size="sm" onClick={() => onAgregar(producto.id)} className="gap-1">
-            <ShoppingCart className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline text-xs">Agregar</span>
-          </Button>
-        </div>
-      </CardContent>
+
+      <div className="flex flex-col flex-1">
+        <CardContent className="flex flex-col items-center flex-1 p-5 gap-3">
+          <h3 className="font-bold text-lg md:text-xl text-foreground text-center leading-tight line-clamp-1" title={producto.nombre}>{producto.nombre}</h3>
+          <p className="text-sm md:text-base text-muted-foreground text-center line-clamp-3 leading-relaxed" title={producto.descripcion}>{producto.descripcion}</p>
+          <span className="text-xl md:text-2xl font-mono tracking-tight font-bold text-foreground mt-auto pt-2">{formatearMoneda(producto.precio).split(' ')[0]} <span className="text-xs font-sans font-normal text-muted-foreground tracking-normal">{formatearMoneda(producto.precio).split(' ')[1]}</span></span>
+        </CardContent>
+        <Button 
+          className="w-full rounded-none h-12 text-sm font-semibold tracking-wide flex items-center justify-center gap-2 active:scale-[0.98] active:bg-primary/90 transition-all duration-150" 
+          onClick={() => onAgregar(producto.id)}
+        >
+          <ShoppingCart className="h-5 w-5" />
+          Agregar
+        </Button>
+      </div>
     </Card>
   );
 }

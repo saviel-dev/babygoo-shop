@@ -14,6 +14,7 @@ import PaginaDashboard from "@/pages/admin/Dashboard";
 import PaginaInventario from "@/pages/admin/Inventario";
 import PaginaPedidos from "@/pages/admin/Pedidos";
 import PaginaAjustes from "@/pages/admin/Ajustes";
+import PaginaPOS from "@/pages/admin/POS";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -39,6 +40,7 @@ const App = () => (
             <Route path="/admin/inicio" element={<PaginaDashboard />} />
             <Route path="/admin/inventario" element={<PaginaInventario />} />
             <Route path="/admin/pedidos" element={<PaginaPedidos />} />
+            <Route path="/admin/pos" element={<PaginaPOS />} />
             <Route path="/admin/ajustes" element={<PaginaAjustes />} />
           </Route>
 

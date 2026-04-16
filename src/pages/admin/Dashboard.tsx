@@ -11,10 +11,10 @@ export default function PaginaDashboard() {
   const actividad = obtenerActividad().slice(0, 8);
 
   const stats = [
-    { label: 'Total Productos', valor: productos.length, icono: Package, color: 'text-primary' },
-    { label: 'Pedidos Pendientes', valor: pedidos.filter(p => p.estado === 'Pendiente').length, icono: ShoppingBag, color: 'text-accent' },
-    { label: 'Pedidos Entregados', valor: pedidos.filter(p => p.estado === 'Entregado').length, icono: TrendingUp, color: 'text-secondary' },
-    { label: 'Sin Stock', valor: productos.filter(p => p.stock === 0).length, icono: AlertTriangle, color: 'text-destructive' },
+    { label: 'Total Productos', valor: productos.length, icono: Package, color: 'bg-primary' },
+    { label: 'Pedidos Pendientes', valor: pedidos.filter(p => p.estado === 'Pendiente').length, icono: ShoppingBag, color: 'bg-accent' },
+    { label: 'Pedidos Entregados', valor: pedidos.filter(p => p.estado === 'Entregado').length, icono: TrendingUp, color: 'bg-secondary' },
+    { label: 'Sin Stock', valor: productos.filter(p => p.stock === 0).length, icono: AlertTriangle, color: 'bg-destructive' },
   ];
 
   return (
@@ -23,14 +23,14 @@ export default function PaginaDashboard() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map(s => (
-          <Card key={s.label}>
+          <Card key={s.label} className={`${s.color} border-none shadow-md overflow-hidden text-white`}>
             <CardContent className="flex items-center gap-4 p-6">
-              <div className="p-2 rounded-lg bg-muted">
-                <s.icono className={`h-6 w-6 ${s.color}`} />
+              <div className="p-3 rounded-xl bg-white/20 backdrop-blur-sm shadow-sm flex items-center justify-center">
+                <s.icono className="h-6 w-6 text-white" />
               </div>
-              <div>
-                <p className="text-2xl font-bold">{s.valor}</p>
-                <p className="text-xs text-muted-foreground">{s.label}</p>
+              <div className="flex flex-col gap-1">
+                <span className="text-3xl font-bold">{s.valor}</span>
+                <span className="text-xs font-medium text-white/80 uppercase tracking-wider">{s.label}</span>
               </div>
             </CardContent>
           </Card>
@@ -59,16 +59,18 @@ export default function PaginaDashboard() {
             {actividad.length === 0 ? (
               <p className="text-sm text-muted-foreground">Sin actividad reciente</p>
             ) : (
-              <div className="space-y-3">
+              <ul className="space-y-3 list-disc pl-5 marker:text-slate-400">
                 {actividad.map(a => (
-                  <div key={a.id} className="flex justify-between items-start text-sm">
-                    <span>{a.mensaje}</span>
-                    <span className="text-xs text-muted-foreground whitespace-nowrap ml-2">
-                      {new Date(a.fecha).toLocaleDateString('es-MX')}
-                    </span>
-                  </div>
+                  <li key={a.id} className="text-sm pl-1">
+                    <div className="flex justify-between items-start">
+                      <span>{a.mensaje}</span>
+                      <span className="text-xs text-muted-foreground whitespace-nowrap ml-2">
+                        {new Date(a.fecha).toLocaleDateString('es-MX')}
+                      </span>
+                    </div>
+                  </li>
                 ))}
-              </div>
+              </ul>
             )}
           </CardContent>
         </Card>

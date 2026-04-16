@@ -4,8 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ItemCarrito, DetallePedido, Pedido } from '@/types';
-import { obtenerProductoPorId, guardarPedido, vaciarCarrito } from '@/store';
-import { useToast } from '@/hooks/use-toast';
+import { obtenerProductoPorId, guardarPedido, vaciarCarrito, formatearMoneda } from '@/store';
+import Swal from 'sweetalert2';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 
 interface Props {
@@ -17,7 +17,6 @@ interface Props {
 }
 
 export function CheckoutModal({ abierto, onCerrar, items, totalPrecio, onPedidoCreado }: Props) {
-  const { toast } = useToast();
   const [nombre, setNombre] = useState('');
   const [correo, setCorreo] = useState('');
   const [telefono, setTelefono] = useState('');
@@ -29,7 +28,7 @@ export function CheckoutModal({ abierto, onCerrar, items, totalPrecio, onPedidoC
     const archivo = e.target.files?.[0];
     if (!archivo) return;
     if (archivo.size > 5 * 1024 * 1024) {
-      toast({ title: 'Error', description: 'El archivo no debe superar 5MB', variant: 'destructive' });
+      Swal.fire({ title: 'Error', text: 'El archivo no debe superar 5MB', icon: 'error' });
       return;
     }
     const lector = new FileReader();
@@ -49,7 +48,7 @@ export function CheckoutModal({ abierto, onCerrar, items, totalPrecio, onPedidoC
 
   const enviar = () => {
     if (!nombre.trim() || !telefono.trim()) {
-      toast({ title: 'Campos requeridos', description: 'Ingresa tu nombre y teléfono.', variant: 'destructive' });
+      Swal.fire({ title: 'Campos requeridos', text: 'Ingresa tu nombre y teléfono.', icon: 'warning' });
       return;
     }
     setEnviando(true);
@@ -68,7 +67,12 @@ export function CheckoutModal({ abierto, onCerrar, items, totalPrecio, onPedidoC
 
     guardarPedido(pedido);
     vaciarCarrito();
-    toast({ title: '¡Pedido enviado!', description: 'Nos pondremos en contacto contigo pronto.' });
+    Swal.fire({
+      title: '¡Pedido enviado!',
+      text: 'Nos pondremos en contacto contigo pronto.',
+      icon: 'success',
+      confirmButtonText: 'Aceptar'
+    });
     setNombre(''); setCorreo(''); setTelefono(''); setComprobante('');
     setEnviando(false);
     onPedidoCreado();
@@ -116,14 +120,14 @@ export function CheckoutModal({ abierto, onCerrar, items, totalPrecio, onPedidoC
               {detalles.map(d => (
                 <div key={d.productoId} className="flex justify-between text-sm">
                   <span>{d.nombreProducto} x{d.cantidad}</span>
-                  <span className="font-medium">${(d.precioUnitario * d.cantidad).toLocaleString('es-MX')}</span>
+                  <span className="font-medium">{formatearMoneda(d.precioUnitario * d.cantidad)}</span>
                 </div>
               ))}
             </div>
           )}
           <div className="flex justify-between font-bold mt-3 pt-2 border-t">
             <span>Total</span>
-            <span className="text-primary">${totalPrecio.toLocaleString('es-MX')} MXN</span>
+            <span className="text-primary">{formatearMoneda(totalPrecio)}</span>
           </div>
         </div>
 

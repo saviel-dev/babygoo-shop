@@ -2,34 +2,24 @@ import { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-const banners = [
-  {
-    id: 1,
-    titulo: '¡Nueva Colección Primavera!',
-    subtitulo: 'Hasta 30% de descuento en mamelucos y conjuntos',
-    color: 'from-primary/90 to-secondary/80',
-  },
-  {
-    id: 2,
-    titulo: 'Recién Nacidos',
-    subtitulo: 'La ropa más suave para los más pequeños',
-    color: 'from-secondary/90 to-primary/80',
-  },
-  {
-    id: 3,
-    titulo: 'Envío Gratis',
-    subtitulo: 'En compras mayores a $999 MXN',
-    color: 'from-accent/90 to-primary/80',
-  },
-];
+import { obtenerBanners } from '@/store';
+import { Banner } from '@/types';
 
 export function Carrusel() {
   const [actual, setActual] = useState(0);
+  const [banners, setBanners] = useState<Banner[]>([]);
 
   useEffect(() => {
+    setBanners(obtenerBanners());
+  }, []);
+
+  useEffect(() => {
+    if (banners.length === 0) return;
     const intervalo = setInterval(() => setActual(prev => (prev + 1) % banners.length), 5000);
     return () => clearInterval(intervalo);
-  }, []);
+  }, [banners.length]);
+
+  if (banners.length === 0) return null;
 
   return (
     <div className="relative overflow-hidden rounded-xl mx-4 my-6">

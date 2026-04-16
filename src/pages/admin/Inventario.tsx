@@ -7,13 +7,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Pencil, Trash2, Search } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, CheckCircle2, XCircle } from 'lucide-react';
 import { Producto, Talla, Categoria } from '@/types';
-import { obtenerProductos, guardarProducto, eliminarProducto } from '@/store';
-import { useToast } from '@/hooks/use-toast';
+import { obtenerProductos, guardarProducto, eliminarProducto, formatearMoneda, obtenerCategorias } from '@/store';
+import Swal from 'sweetalert2';
 
 const TALLAS: Talla[] = ['RN', '0-3M', '3-6M', '6-9M', '9-12M', '12-18M', '18-24M', '24M'];
-const CATEGORIAS: Categoria[] = ['Niño', 'Niña', 'Unisex', 'Accesorios'];
 
 const productoVacio: Omit<Producto, 'id' | 'creadoEn'> = {
   nombre: '', descripcion: '', precio: 0, talla: 'RN', categoria: 'Unisex',
@@ -21,8 +20,8 @@ const productoVacio: Omit<Producto, 'id' | 'creadoEn'> = {
 };
 
 export default function PaginaInventario() {
-  const { toast } = useToast();
   const [productos, setProductos] = useState(obtenerProductos());
+  const [categorias, setCategorias] = useState<string[]>(() => obtenerCategorias());
   const [modalAbierto, setModalAbierto] = useState(false);
   const [editando, setEditando] = useState<Producto | null>(null);
   const [form, setForm] = useState(productoVacio);
@@ -30,7 +29,10 @@ export default function PaginaInventario() {
   const [filtroCategoria, setFiltroCategoria] = useState('Todas');
   const [filtroTalla, setFiltroTalla] = useState('Todas');
 
-  const refrescar = () => setProductos(obtenerProductos());
+  const refrescar = () => {
+    setProductos(obtenerProductos());
+    setCategorias(obtenerCategorias());
+  };
 
   const abrirCrear = () => {
     setEditando(null);
@@ -45,8 +47,8 @@ export default function PaginaInventario() {
   };
 
   const guardar = () => {
-    if (!form.nombre.trim()) { toast({ title: 'Error', description: 'El nombre es requerido', variant: 'destructive' }); return; }
-    if (form.precio < 0) { toast({ title: 'Error', description: 'El precio no puede ser negativo', variant: 'destructive' }); return; }
+    if (!form.nombre.trim()) { Swal.fire({ title: 'Error', text: 'El nombre es requerido', icon: 'error', confirmButtonColor: '#7c3aed' }); return; }
+    if (form.precio < 0) { Swal.fire({ title: 'Error', text: 'El precio no puede ser negativo', icon: 'error', confirmButtonColor: '#7c3aed' }); return; }
 
     const producto: Producto = {
       id: editando?.id || crypto.randomUUID(),
@@ -56,13 +58,33 @@ export default function PaginaInventario() {
     guardarProducto(producto);
     refrescar();
     setModalAbierto(false);
-    toast({ title: editando ? 'Producto actualizado' : 'Producto creado' });
+    Swal.fire({ title: '¡Éxito!', text: editando ? 'Producto actualizado correctamente.' : 'Producto creado correctamente.', icon: 'success', confirmButtonColor: '#7c3aed', timer: 1500, showConfirmButton: false });
   };
 
   const borrar = (id: string) => {
-    eliminarProducto(id);
-    refrescar();
-    toast({ title: 'Producto eliminado' });
+    Swal.fire({
+      title: '¿Estás seguro?',
+      text: "¡Esta acción no se puede deshacer!",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#7c3aed',
+      cancelButtonColor: '#ef4444',
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        eliminarProducto(id);
+        refrescar();
+        Swal.fire({
+          title: '¡Eliminado!',
+          text: 'El producto ha sido borrado del inventario.',
+          icon: 'success',
+          confirmButtonColor: '#7c3aed',
+          timer: 1500,
+          showConfirmButton: false
+        });
+      }
+    });
   };
 
   const productosFiltrados = useMemo(() => {
@@ -93,7 +115,7 @@ export default function PaginaInventario() {
           <SelectTrigger className="w-full sm:w-40"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="Todas">Todas</SelectItem>
-            {CATEGORIAS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+            {categorias.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={filtroTalla} onValueChange={setFiltroTalla}>
@@ -108,30 +130,38 @@ export default function PaginaInventario() {
       {/* Tabla */}
       <div className="rounded-lg border bg-card">
         <Table>
-          <TableHeader>
+          <TableHeader className="bg-primary/10">
             <TableRow>
-              <TableHead>Imagen</TableHead>
-              <TableHead>Nombre</TableHead>
-              <TableHead className="hidden md:table-cell">Talla</TableHead>
-              <TableHead className="hidden md:table-cell">Categoría</TableHead>
-              <TableHead>Precio</TableHead>
-              <TableHead>Stock</TableHead>
-              <TableHead className="hidden sm:table-cell">Disponible</TableHead>
-              <TableHead>Acciones</TableHead>
+              <TableHead className="text-center">Imagen</TableHead>
+              <TableHead className="text-center">Nombre</TableHead>
+              <TableHead className="hidden md:table-cell text-center">Talla</TableHead>
+              <TableHead className="hidden md:table-cell text-center">Categoría</TableHead>
+              <TableHead className="text-center">Precio</TableHead>
+              <TableHead className="text-center">Stock</TableHead>
+              <TableHead className="hidden sm:table-cell text-center">Disponible</TableHead>
+              <TableHead className="text-center">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {productosFiltrados.map(p => (
               <TableRow key={p.id}>
-                <TableCell><img src={p.imagen} alt={p.nombre} className="w-10 h-10 rounded object-cover" /></TableCell>
-                <TableCell className="font-medium">{p.nombre}</TableCell>
-                <TableCell className="hidden md:table-cell">{p.talla}</TableCell>
-                <TableCell className="hidden md:table-cell">{p.categoria}</TableCell>
-                <TableCell>${p.precio.toLocaleString('es-MX')}</TableCell>
-                <TableCell>{p.stock}</TableCell>
-                <TableCell className="hidden sm:table-cell">{p.disponible ? '✅' : '❌'}</TableCell>
+                <TableCell><div className="flex justify-center"><img src={p.imagen} alt={p.nombre} className="w-10 h-10 rounded object-cover" /></div></TableCell>
+                <TableCell className="font-medium text-center">{p.nombre}</TableCell>
+                <TableCell className="hidden md:table-cell text-center">{p.talla}</TableCell>
+                <TableCell className="hidden md:table-cell text-center">{p.categoria}</TableCell>
+                <TableCell className="text-center">{formatearMoneda(p.precio)}</TableCell>
+                <TableCell className="text-center">{p.stock}</TableCell>
+                <TableCell className="hidden sm:table-cell">
+                  <div className="flex justify-center">
+                    {p.disponible ? (
+                      <CheckCircle2 className="h-5 w-5 text-green-500" />
+                    ) : (
+                      <XCircle className="h-5 w-5 text-red-500/80" />
+                    )}
+                  </div>
+                </TableCell>
                 <TableCell>
-                  <div className="flex gap-1">
+                  <div className="flex gap-1 justify-center">
                     <Button variant="ghost" size="icon" onClick={() => abrirEditar(p)}><Pencil className="h-4 w-4" /></Button>
                     <Button variant="ghost" size="icon" className="text-destructive" onClick={() => borrar(p.id)}><Trash2 className="h-4 w-4" /></Button>
                   </div>
@@ -169,7 +199,7 @@ export default function PaginaInventario() {
               <Label>Categoría</Label>
               <Select value={form.categoria} onValueChange={v => setForm({ ...form, categoria: v as Categoria })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{CATEGORIAS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                <SelectContent>{categorias.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-2">

@@ -2,7 +2,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Button } from '@/components/ui/button';
 import { Minus, Plus, Trash2 } from 'lucide-react';
 import { ItemCarrito } from '@/types';
-import { obtenerProductoPorId } from '@/store';
+import { obtenerProductoPorId, formatearMoneda } from '@/store';
 
 interface Props {
   abierto: boolean;
@@ -38,7 +38,7 @@ export function CarritoSidebar({ abierto, onCerrar, items, totalPrecio, onActual
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{prod.nombre}</p>
                       <p className="text-xs text-muted-foreground">{prod.talla}</p>
-                      <p className="text-sm font-bold text-primary">${(prod.precio * item.cantidad).toLocaleString('es-MX')}</p>
+                      <p className="text-sm font-bold text-primary">{formatearMoneda(prod.precio * item.cantidad)}</p>
                     </div>
                     <div className="flex flex-col items-center gap-1">
                       <div className="flex items-center gap-1">
@@ -62,7 +62,7 @@ export function CarritoSidebar({ abierto, onCerrar, items, totalPrecio, onActual
             <div className="border-t pt-4 space-y-3">
               <div className="flex justify-between font-bold text-lg">
                 <span>Total</span>
-                <span className="text-primary">${totalPrecio.toLocaleString('es-MX')} MXN</span>
+                <span className="text-primary">{formatearMoneda(totalPrecio)}</span>
               </div>
               <Button className="w-full" size="lg" onClick={onCheckout}>
                 Proceder al pago
