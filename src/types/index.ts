@@ -65,7 +65,7 @@ export interface Banner {
 
 export interface ActividadReciente {
   id: string;
-  tipo: 'pedido' | 'producto' | 'config';
+  tipo: 'pedido' | 'producto' | 'config' | 'venta' | 'limpieza';
   mensaje: string;
   fecha: string;
 }

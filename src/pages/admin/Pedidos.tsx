@@ -4,9 +4,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Eye, Download, User, Phone, Mail, Calendar, FileImage, XCircle, MessageCircle } from 'lucide-react';
-import { obtenerPedidos, guardarPedido, formatearMoneda } from '@/store';
+import { Eye, Download, User, Phone, Mail, Calendar, FileImage, XCircle, MessageCircle, Loader2, Bell, Trash2, RefreshCw } from 'lucide-react';
+import { usePedidos } from '@/hooks/usePedidos';
+import { useConfiguracion } from '@/hooks/useConfiguracion';
 import { Pedido, EstadoPedido } from '@/types';
+import Swal from 'sweetalert2';
 
 const ESTADOS: EstadoPedido[] = ['Pendiente', 'En proceso', 'Cancelado', 'Entregado'];
 
@@ -18,19 +20,79 @@ const colorEstado: Record<EstadoPedido, string> = {
 };
 
 export default function PaginaPedidos() {
-  const [pedidos, setPedidos] = useState(obtenerPedidos());
+  const { pedidos, cargando, nuevoPedido, limpiarNuevoPedido, actualizarEstado, eliminarEntregados, recargar } = usePedidos();
+  const { formatearMoneda } = useConfiguracion();
   const [detalle, setDetalle] = useState<Pedido | null>(null);
   const [previewImg, setPreviewImg] = useState<string | null>(null);
 
-  const cambiarEstado = (pedido: Pedido, nuevoEstado: EstadoPedido) => {
-    const actualizado = { ...pedido, estado: nuevoEstado };
-    guardarPedido(actualizado);
-    setPedidos(obtenerPedidos());
+  if (cargando) {
+    return <div className="flex justify-center p-20"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
+  }
+
+  const cambiarEstado = async (pedido: Pedido, nuevoEstado: EstadoPedido) => {
+    await actualizarEstado(pedido.id, nuevoEstado);
+  };
+
+  const manejarLimpieza = async () => {
+    const entregados = pedidos.filter(p => p.estado === 'Entregado').length;
+    if (entregados === 0) {
+      Swal.fire({ title: 'Atención', text: 'No hay pedidos Entregados para limpiar.', icon: 'info', confirmButtonColor: '#7c3aed' });
+      return;
+    }
+
+    const res = await Swal.fire({
+      title: '¿Limpiar historial?',
+      text: `Se eliminarán permanentemente ${entregados} pedido(s) marcado(s) como Entregado.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#94a3b8'
+    });
+
+    if (res.isConfirmed) {
+      const { error } = await eliminarEntregados();
+      if (error) {
+        Swal.fire('Error', 'No se pudieron limpiar los pedidos.', 'error');
+      } else {
+        Swal.fire({ title: '¡Limpiado!', text: 'El historial de entregados se borró con éxito.', icon: 'success', confirmButtonColor: '#7c3aed', timer: 2000, showConfirmButton: false });
+      }
+    }
   };
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Pedidos</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <h1 className="text-2xl font-bold">Pedidos</h1>
+          <Button
+            variant="outline"
+            size="icon"
+            title="Actualizar datos"
+            onClick={() => recargar()}
+            className="text-slate-500 hover:text-primary hover:bg-orange-50 hover:border-orange-200 transition-all duration-300 hover:scale-110 active:scale-90 shadow-sm h-8 w-8 group"
+          >
+            <RefreshCw className="h-4 w-4 group-hover:rotate-180 transition-transform duration-500" />
+          </Button>
+          {nuevoPedido && (
+            <button
+              onClick={limpiarNuevoPedido}
+              className="flex items-center gap-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-3 py-1.5 text-sm font-semibold animate-bounce"
+            >
+              <Bell className="w-4 h-4" /> Nuevo pedido
+            </button>
+          )}
+        </div>
+        <Button
+          variant="outline"
+          className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 transition-colors gap-2 shadow-sm"
+          onClick={manejarLimpieza}
+        >
+          <Trash2 className="w-4 h-4" />
+          Limpiar Entregados
+        </Button>
+      </div>
 
       {pedidos.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">No hay pedidos aún</div>
@@ -92,10 +154,10 @@ export default function PaginaPedidos() {
               <DialogTitle className="text-lg font-bold text-slate-800 text-left">Detalle del Pedido</DialogTitle>
             </DialogHeader>
           </div>
-          
+
           {detalle && (
             <div className="px-5 pb-5 pt-1 space-y-4 max-h-[80vh] overflow-y-auto w-full">
-              
+
               {/* Cliente Info */}
               <div className="grid grid-cols-2 gap-3 text-sm mt-3">
                 <div className="space-y-0.5">
@@ -167,21 +229,27 @@ export default function PaginaPedidos() {
                       </div>
                       <span className="text-[11px] font-medium text-slate-600 truncate">comp_{detalle.nombreCliente.split(' ')[0].toLowerCase()}.jpg</span>
                     </div>
-                    
+
                     <div className="flex items-center gap-1 shrink-0 ml-2">
-                      <Button 
-                        type="button" 
-                        variant="outline" 
-                        size="icon" 
-                        className="h-7 w-7 text-slate-500 hover:text-blue-600 hover:bg-blue-50" 
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8 text-slate-500 hover:text-blue-600 hover:bg-blue-50 hover:border-blue-200 transition-all duration-200 hover:scale-110 active:scale-90 shadow-sm"
                         title="Previsualizar"
                         onClick={() => setPreviewImg(detalle.comprobante || null)}
                       >
-                        <Eye className="w-3.5 h-3.5" />
+                        <Eye className="w-4 h-4" />
                       </Button>
                       <a href={detalle.comprobante} download={`comp_${detalle.nombreCliente.split(' ')[0].toLowerCase()}.jpg`}>
-                        <Button type="button" variant="outline" size="icon" className="h-7 w-7 text-slate-500 hover:text-primary" title="Descargar">
-                          <Download className="w-3.5 h-3.5" />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8 text-slate-500 hover:text-orange-600 hover:bg-orange-50 hover:border-orange-200 transition-all duration-200 hover:scale-110 active:scale-90 shadow-sm"
+                          title="Descargar"
+                        >
+                          <Download className="w-4 h-4" />
                         </Button>
                       </a>
                     </div>
@@ -198,18 +266,18 @@ export default function PaginaPedidos() {
         <DialogContent className="max-w-[95vw] sm:max-w-xl p-0 overflow-hidden bg-transparent border-0 shadow-none">
           <div className="relative group">
             <div className="absolute top-4 right-4 z-10">
-              <Button 
-                variant="secondary" 
-                size="icon" 
+              <Button
+                variant="secondary"
+                size="icon"
                 className="rounded-full bg-white/20 backdrop-blur-md hover:bg-white/40 border-0 text-white"
                 onClick={() => setPreviewImg(null)}
               >
                 <XCircle className="h-5 w-5" />
               </Button>
             </div>
-            <img 
-              src={previewImg || ''} 
-              alt="Previsualización de comprobante" 
+            <img
+              src={previewImg || ''}
+              alt="Previsualización de comprobante"
               className="w-full h-auto max-h-[90vh] object-contain rounded-xl shadow-2xl"
             />
           </div>

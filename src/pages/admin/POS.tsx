@@ -4,8 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Search, Plus, Minus, Trash2, ShoppingCart, CheckCircle2, Receipt, User, Phone, Tag, ClipboardList, X, Download } from 'lucide-react';
-import { obtenerProductos, guardarProducto, guardarPedido, obtenerPedidos, obtenerProductoPorId, formatearMoneda } from '@/store';
+import { Search, Plus, Minus, Trash2, ShoppingCart, CheckCircle2, Receipt, User, Phone, Tag, ClipboardList, X, Download, Loader2, RefreshCw } from 'lucide-react';
+import { useProductos } from '@/hooks/useProductos';
+import { usePedidos } from '@/hooks/usePedidos';
+import { useConfiguracion } from '@/hooks/useConfiguracion';
 import { Producto, DetallePedido, Pedido } from '@/types';
 import * as htmlToImage from 'html-to-image';
 import Swal from 'sweetalert2';
@@ -18,8 +20,13 @@ interface ItemVenta {
 const METODOS_PAGO = ['Efectivo', 'Transferencia', 'Tarjeta', 'WhatsApp Pay'];
 
 export default function PaginaPOS() {
-  const [productos, setProductos] = useState(() => obtenerProductos().filter(p => p.disponible && p.stock > 0));
+  const { productosDisponibles: productos, cargando: cargandoProd, recargar: recargarProd } = useProductos();
+  const { pedidos, crearPedido, actualizarEstado, cargando: cargandoPed, recargar: recargarPed } = usePedidos();
+  const { formatearMoneda, cargando: cargandoConfig } = useConfiguracion();
+
   const [busqueda, setBusqueda] = useState('');
+  const [pagina, setPagina] = useState(0);
+  const POR_PAGINA = 8;
   const [carrito, setCarrito] = useState<ItemVenta[]>([]);
   const [cliente, setCliente] = useState('');
   const [telefono, setTelefono] = useState('');
@@ -28,6 +35,7 @@ export default function PaginaPOS() {
   const [modalImportar, setModalImportar] = useState(false);
   const [busquedaPedido, setBusquedaPedido] = useState('');
   const [ticketGenerado, setTicketGenerado] = useState<Pedido | null>(null);
+  const [pedidoImportadoId, setPedidoImportadoId] = useState<string | null>(null);
 
   const productosFiltrados = useMemo(() => {
     const q = busqueda.toLowerCase();
@@ -37,6 +45,14 @@ export default function PaginaPOS() {
       p.talla.toLowerCase().includes(q)
     );
   }, [productos, busqueda]);
+
+  const totalPaginas = Math.ceil(productosFiltrados.length / POR_PAGINA);
+  const productosPagina = productosFiltrados.slice(pagina * POR_PAGINA, (pagina + 1) * POR_PAGINA);
+
+  const manejarBusqueda = (val: string) => {
+    setBusqueda(val);
+    setPagina(0);
+  };
 
   const agregarAlCarrito = (producto: Producto) => {
     setCarrito(prev => {
@@ -65,15 +81,9 @@ export default function PaginaPOS() {
   const montoDescuento = (subtotal * descuento) / 100;
   const total = subtotal - montoDescuento;
 
-  const refrescarInventario = () => {
-    setProductos(obtenerProductos().filter(p => p.disponible && p.stock > 0));
-  };
-
-  // ── Importar desde pedido ──
   const pedidosDisponibles = useMemo(() => {
     const q = busquedaPedido.toLowerCase();
-    return obtenerPedidos()
-      .sort((a, b) => new Date(b.creadoEn).getTime() - new Date(a.creadoEn).getTime())
+    return pedidos
       .filter(p => p.estado !== 'Entregado')
       .filter(p =>
         p.nombreCliente.toLowerCase().includes(q) ||
@@ -81,12 +91,12 @@ export default function PaginaPOS() {
         (p.telefono || '').toLowerCase().includes(q)
       )
       .slice(0, 20);
-  }, [modalImportar, busquedaPedido]);
+  }, [modalImportar, busquedaPedido, pedidos]);
 
   const importarPedido = (pedido: Pedido) => {
     const nuevosItems: ItemVenta[] = [];
     for (const detalle of pedido.detalles) {
-      const prod = obtenerProductoPorId(detalle.productoId);
+      const prod = productos.find(p => p.id === detalle.productoId);
       if (prod && prod.disponible && prod.stock > 0) {
         const cantidadImportar = Math.min(detalle.cantidad, prod.stock);
         nuevosItems.push({ producto: prod, cantidad: cantidadImportar });
@@ -99,6 +109,7 @@ export default function PaginaPOS() {
     setCarrito(nuevosItems);
     setCliente(pedido.nombreCliente);
     setTelefono(pedido.telefono !== 'POS - Sin teléfono' ? pedido.telefono : '');
+    setPedidoImportadoId(pedido.id);
     setModalImportar(false);
     setBusquedaPedido('');
     Swal.fire({ title: '¡Importado!', text: `Se cargaron ${nuevosItems.length} producto(s) del pedido de ${pedido.nombreCliente}.`, icon: 'success', confirmButtonColor: '#7c3aed', timer: 1800, showConfirmButton: false });
@@ -141,8 +152,38 @@ export default function PaginaPOS() {
       precioUnitario: i.producto.precio,
     }));
 
-    const pedido: Pedido = {
-      id: crypto.randomUUID(),
+    let finalId = '';
+
+    if (pedidoImportadoId) {
+      // Si el pedido ya existe, solo actualizamos su estado
+      // (asumimos que el stock ya fue descontado al crear el original)
+      const { error } = await actualizarEstado(pedidoImportadoId, 'Entregado');
+      if (error) {
+        Swal.fire({ title: 'Error', text: 'No se pudo actualizar el pedido original.', icon: 'error', confirmButtonColor: '#7c3aed' });
+        return;
+      }
+      finalId = pedidoImportadoId;
+    } else {
+      // Si es una venta nueva desde cero
+      const result = await crearPedido({
+        nombreCliente: cliente,
+        telefono: telefono || 'POS - Sin teléfono',
+        detalles,
+        total,
+      });
+
+      if (result.error || !result.id) {
+        Swal.fire({ title: 'Error', text: 'No se pudo procesar la venta.', icon: 'error', confirmButtonColor: '#7c3aed' });
+        return;
+      }
+      finalId = result.id;
+      // En POS la venta es inmediata
+      await actualizarEstado(finalId, 'Entregado');
+    }
+
+    // Limpiar formulario y mostrar ticket mock
+    const pedidoFinal: Pedido = {
+      id: finalId,
       nombreCliente: cliente,
       telefono: telefono || 'POS - Sin teléfono',
       detalles,
@@ -150,25 +191,13 @@ export default function PaginaPOS() {
       estado: 'Entregado',
       creadoEn: new Date().toISOString(),
     };
-    guardarPedido(pedido);
 
-    // Descontar stock
-    const todosProductos = obtenerProductos();
-    carrito.forEach(item => {
-      const prod = todosProductos.find(p => p.id === item.producto.id);
-      if (prod) {
-        guardarProducto({ ...prod, stock: Math.max(0, prod.stock - item.cantidad) });
-      }
-    });
-
-    // Limpiar formulario y mostrar ticket
-    const pedidoFinal = { ...pedido };
     setCarrito([]);
     setCliente('');
     setTelefono('');
     setDescuento(0);
     setMetodoPago('Efectivo');
-    refrescarInventario();
+    setPedidoImportadoId(null);
 
     setTicketGenerado(pedidoFinal);
   };
@@ -194,6 +223,11 @@ export default function PaginaPOS() {
 
   return (
     <div className="flex flex-col lg:flex-row gap-5 h-full min-h-[600px]">
+      {(cargandoProd || cargandoPed || cargandoConfig) && (
+        <div className="absolute inset-0 z-50 bg-white/80 backdrop-blur-sm flex items-center justify-center">
+          <Loader2 className="w-10 h-10 animate-spin text-primary" />
+        </div>
+      )}
 
       {/* ── Modal Importar desde Pedido ── */}
       <Dialog open={modalImportar} onOpenChange={v => { setModalImportar(v); if (!v) setBusquedaPedido(''); }}>
@@ -334,6 +368,15 @@ export default function PaginaPOS() {
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
+              size="icon"
+              title="Actualizar datos"
+              onClick={() => { recargarProd(); recargarPed(); }}
+              className="text-slate-500 hover:text-primary hover:bg-orange-50 hover:border-orange-200 transition-all duration-300 hover:scale-110 active:scale-90 shadow-sm h-8 w-8 group"
+            >
+              <RefreshCw className="h-3.5 w-3.5 group-hover:rotate-180 transition-transform duration-500" />
+            </Button>
+            <Button
+              variant="outline"
               size="sm"
               className="gap-2 text-slate-600 hover:text-primary hover:border-primary/40 hover:bg-primary/5 hover:-translate-y-0.5 hover:shadow-sm transition-all duration-200 font-bold text-xs h-8 px-3"
               onClick={() => setModalImportar(true)}
@@ -353,11 +396,11 @@ export default function PaginaPOS() {
             placeholder="Buscar por nombre, talla o categoría..."
             className="pl-10 pr-10"
             value={busqueda}
-            onChange={e => setBusqueda(e.target.value)}
+            onChange={e => manejarBusqueda(e.target.value)}
           />
           {busqueda && (
             <button 
-              onClick={() => setBusqueda('')} 
+              onClick={() => manejarBusqueda('')} 
               className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
             >
               <X className="h-4 w-4" />
@@ -367,7 +410,7 @@ export default function PaginaPOS() {
 
         {/* Grid de productos */}
         <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 overflow-y-auto pr-1" style={{ maxHeight: '65vh' }}>
-          {productosFiltrados.map(p => {
+          {productosPagina.map(p => {
             const enCarrito = carrito.find(i => i.producto.id === p.id);
             return (
               <button
@@ -421,6 +464,31 @@ export default function PaginaPOS() {
             </div>
           )}
         </div>
+
+        {/* Controles de Paginación */}
+        {totalPaginas > 1 && (
+          <div className="flex items-center justify-center gap-4 mt-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPagina(p => Math.max(0, p - 1))}
+              disabled={pagina === 0}
+            >
+              Anterior
+            </Button>
+            <span className="text-sm font-medium text-slate-500">
+              Página {pagina + 1} de {totalPaginas}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPagina(p => Math.min(totalPaginas - 1, p + 1))}
+              disabled={pagina >= totalPaginas - 1}
+            >
+              Siguiente
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* ── Panel derecho: Carrito y Cobro ── */}
@@ -433,7 +501,7 @@ export default function PaginaPOS() {
               <User className="w-4 h-4 text-primary" /> Datos del cliente
             </h2>
             <button 
-              onClick={() => { setCarrito([]); setCliente(''); setTelefono(''); setDescuento(0); setMetodoPago('Efectivo'); setBusqueda(''); }} 
+              onClick={() => { setCarrito([]); setCliente(''); setTelefono(''); setDescuento(0); setMetodoPago('Efectivo'); setBusqueda(''); setPedidoImportadoId(null); }} 
               className="text-xs text-slate-400 hover:text-slate-600 border border-slate-200 hover:bg-slate-50 px-2 py-1 rounded transition-colors font-medium"
             >
               Limpiar Todo

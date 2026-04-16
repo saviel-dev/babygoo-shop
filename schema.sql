@@ -58,11 +58,24 @@ CREATE TABLE IF NOT EXISTS banners (
   titulo    TEXT  NOT NULL,
   subtitulo TEXT  NOT NULL DEFAULT '',
   color     TEXT  NOT NULL DEFAULT 'from-primary/90 to-secondary/80',
-  orden     INT   NOT NULL DEFAULT 0,
-  CONSTRAINT banners_max_tres CHECK (
-    (SELECT COUNT(*) FROM banners) <= 3
-  )
+  orden     INT   NOT NULL DEFAULT 0
 );
+
+-- Trigger: impedir más de 3 banners
+CREATE OR REPLACE FUNCTION check_max_banners()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+  IF (SELECT COUNT(*) FROM banners) >= 3 THEN
+    RAISE EXCEPTION 'Solo se permiten hasta 3 banners activos.';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_max_banners ON banners;
+CREATE TRIGGER trg_max_banners
+  BEFORE INSERT ON banners
+  FOR EACH ROW EXECUTE FUNCTION check_max_banners();
 
 -- Banners por defecto
 INSERT INTO banners (titulo, subtitulo, color, orden) VALUES
@@ -70,6 +83,7 @@ INSERT INTO banners (titulo, subtitulo, color, orden) VALUES
   ('Recién Nacidos',              'La ropa más suave para los más pequeños',           'from-secondary/90 to-primary/80', 2),
   ('Envío Gratis',                'En compras mayores a $999 MXN',                      'from-accent/90 to-primary/80',    3)
 ON CONFLICT DO NOTHING;
+
 
 
 -- ─────────────────────────────────────────────
@@ -222,69 +236,50 @@ ALTER TABLE configuracion_tienda ENABLE ROW LEVEL SECURITY;
 ALTER TABLE admin_credenciales   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE actividad_reciente   ENABLE ROW LEVEL SECURITY;
 
--- Categorías: lectura pública, escritura solo autenticados
-CREATE POLICY "categorias_select_public"
-  ON categorias FOR SELECT USING (true);
+-- Categorías: público
+DROP POLICY IF EXISTS "categorias_select_public" ON categorias;
+DROP POLICY IF EXISTS "categorias_all_auth" ON categorias;
+CREATE POLICY "categorias_all_public"
+  ON categorias FOR ALL USING (true) WITH CHECK (true);
 
-CREATE POLICY "categorias_all_auth"
-  ON categorias FOR ALL
-  USING (auth.role() = 'authenticated')
-  WITH CHECK (auth.role() = 'authenticated');
+-- Banners: público
+DROP POLICY IF EXISTS "banners_select_public" ON banners;
+DROP POLICY IF EXISTS "banners_all_auth" ON banners;
+CREATE POLICY "banners_all_public"
+  ON banners FOR ALL USING (true) WITH CHECK (true);
 
--- Banners: lectura pública, escritura solo autenticados
-CREATE POLICY "banners_select_public"
-  ON banners FOR SELECT USING (true);
+-- Productos: público
+DROP POLICY IF EXISTS "productos_select_public" ON productos;
+DROP POLICY IF EXISTS "productos_all_auth" ON productos;
+CREATE POLICY "productos_all_public"
+  ON productos FOR ALL USING (true) WITH CHECK (true);
 
-CREATE POLICY "banners_all_auth"
-  ON banners FOR ALL
-  USING (auth.role() = 'authenticated')
-  WITH CHECK (auth.role() = 'authenticated');
+-- Pedidos: público
+DROP POLICY IF EXISTS "pedidos_insert_public" ON pedidos;
+DROP POLICY IF EXISTS "pedidos_all_auth" ON pedidos;
+CREATE POLICY "pedidos_all_public"
+  ON pedidos FOR ALL USING (true) WITH CHECK (true);
 
--- Productos: lectura pública (todos), escritura solo autenticados
-CREATE POLICY "productos_select_public"
-  ON productos FOR SELECT USING (true);
+-- Detalle pedidos: público
+DROP POLICY IF EXISTS "detalle_insert_public" ON detalle_pedidos;
+DROP POLICY IF EXISTS "detalle_all_auth" ON detalle_pedidos;
+CREATE POLICY "detalle_all_public"
+  ON detalle_pedidos FOR ALL USING (true) WITH CHECK (true);
 
-CREATE POLICY "productos_all_auth"
-  ON productos FOR ALL
-  USING (auth.role() = 'authenticated')
-  WITH CHECK (auth.role() = 'authenticated');
+-- Configuración: público
+DROP POLICY IF EXISTS "config_all_auth" ON configuracion_tienda;
+CREATE POLICY "config_all_public"
+  ON configuracion_tienda FOR ALL USING (true) WITH CHECK (true);
 
--- Pedidos: INSERT público (clientes normales), todo lo demás solo admin
-CREATE POLICY "pedidos_insert_public"
-  ON pedidos FOR INSERT WITH CHECK (true);
+-- Admin credenciales: público
+DROP POLICY IF EXISTS "admin_creds_all_auth" ON admin_credenciales;
+CREATE POLICY "admin_creds_all_public"
+  ON admin_credenciales FOR ALL USING (true) WITH CHECK (true);
 
-CREATE POLICY "pedidos_all_auth"
-  ON pedidos FOR ALL
-  USING (auth.role() = 'authenticated')
-  WITH CHECK (auth.role() = 'authenticated');
-
--- Detalle pedidos: INSERT público, admin para el resto
-CREATE POLICY "detalle_insert_public"
-  ON detalle_pedidos FOR INSERT WITH CHECK (true);
-
-CREATE POLICY "detalle_all_auth"
-  ON detalle_pedidos FOR ALL
-  USING (auth.role() = 'authenticated')
-  WITH CHECK (auth.role() = 'authenticated');
-
--- Configuración: solo admin
-CREATE POLICY "config_all_auth"
-  ON configuracion_tienda FOR ALL
-  USING (auth.role() = 'authenticated')
-  WITH CHECK (auth.role() = 'authenticated');
-
--- Admin credenciales: solo admin (nunca lectura pública)
-CREATE POLICY "admin_creds_all_auth"
-  ON admin_credenciales FOR ALL
-  USING (auth.role() = 'authenticated')
-  WITH CHECK (auth.role() = 'authenticated');
-
--- Actividad: solo admin
-CREATE POLICY "actividad_all_auth"
-  ON actividad_reciente FOR ALL
-  USING (auth.role() = 'authenticated')
-  WITH CHECK (auth.role() = 'authenticated');
-
+-- Actividad: público
+DROP POLICY IF EXISTS "actividad_all_auth" ON actividad_reciente;
+CREATE POLICY "actividad_all_public"
+  ON actividad_reciente FOR ALL USING (true) WITH CHECK (true);
 
 
 -- ─────────────────────────────────────────────
@@ -364,3 +359,18 @@ BEGIN
   RETURN v_pedido_id;
 END;
 $$;
+
+
+-- ─────────────────────────────────────────────
+-- 13. FUNCIÓN RPC: descontar_stock
+--     Descuenta stock de un producto individualmente
+-- ─────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION descontar_stock(p_producto_id UUID, p_cantidad INT)
+RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  UPDATE productos
+  SET stock = GREATEST(0, stock - p_cantidad)
+  WHERE id = p_producto_id;
+END;
+$$;
+

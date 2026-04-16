@@ -1,8 +1,9 @@
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Minus, Plus, Trash2 } from 'lucide-react';
 import { ItemCarrito } from '@/types';
-import { obtenerProductoPorId, formatearMoneda } from '@/store';
+import { useProductos } from '@/hooks/useProductos';
+import { useConfiguracion } from '@/hooks/useConfiguracion';
 
 interface Props {
   abierto: boolean;
@@ -15,11 +16,15 @@ interface Props {
 }
 
 export function CarritoSidebar({ abierto, onCerrar, items, totalPrecio, onActualizar, onEliminar, onCheckout }: Props) {
+  const { productosPorId } = useProductos();
+  const { formatearMoneda } = useConfiguracion();
+
   return (
     <Sheet open={abierto} onOpenChange={onCerrar}>
       <SheetContent className="flex flex-col w-full sm:max-w-md">
         <SheetHeader>
           <SheetTitle>Tu Carrito ({items.reduce((s, i) => s + i.cantidad, 0)})</SheetTitle>
+          <SheetDescription className="sr-only">Contenido actual de tu carrito de compras</SheetDescription>
         </SheetHeader>
 
         {items.length === 0 ? (
@@ -30,7 +35,7 @@ export function CarritoSidebar({ abierto, onCerrar, items, totalPrecio, onActual
           <>
             <div className="flex-1 overflow-y-auto space-y-3 py-4">
               {items.map(item => {
-                const prod = obtenerProductoPorId(item.productoId);
+                const prod = productosPorId(item.productoId);
                 if (!prod) return null;
                 return (
                   <div key={item.productoId} className="flex gap-3 p-2 rounded-lg border">

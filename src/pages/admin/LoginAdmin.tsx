@@ -1,22 +1,48 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Baby, Eye, EyeOff } from 'lucide-react';
-import { loginAdmin } from '@/store';
+import { Baby, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 import Swal from 'sweetalert2';
+// Guardar flag de sesión admin en localStorage
+const ADMIN_AUTH_KEY = 'babygoo_admin_auth';
+export function estaAutenticadoAdmin() { return localStorage.getItem(ADMIN_AUTH_KEY) === 'true'; }
+export function logoutAdmin() { localStorage.removeItem(ADMIN_AUTH_KEY); }
 
 export default function PaginaLoginAdmin() {
   const navigate = useNavigate();
   const [usuario, setUsuario] = useState('');
   const [clave, setClave] = useState('');
   const [mostrarClave, setMostrarClave] = useState(false);
+  const [cargando, setCargando] = useState(false);
 
-  const entrar = (e: React.FormEvent) => {
+  const entrar = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (loginAdmin(usuario, clave)) {
-      navigate('/admin/inicio');
-    } else {
-      Swal.fire({ title: 'Error', text: 'Credenciales incorrectas', icon: 'error', confirmButtonColor: '#7c3aed' });
+    setCargando(true);
+    try {
+      const { data, error } = await supabase
+        .from('admin_credenciales')
+        .select('usuario, clave')
+        .eq('id', 1)
+        .single();
+      if (error || !data) throw new Error('No se pudo verificar');
+      const row = data as { usuario: string; clave: string };
+      if (row.usuario === usuario && row.clave === clave) {
+        localStorage.setItem(ADMIN_AUTH_KEY, 'true');
+        navigate('/admin/inicio');
+      } else {
+        Swal.fire({ title: 'Error', text: 'Credenciales incorrectas', icon: 'error', confirmButtonColor: '#7c3aed' });
+      }
+    } catch {
+      // Fallback a credenciales locales si Supabase no está disponible
+      const { loginAdmin } = await import('@/store');
+      if (loginAdmin(usuario, clave)) {
+        navigate('/admin/inicio');
+      } else {
+        Swal.fire({ title: 'Error', text: 'Credenciales incorrectas', icon: 'error', confirmButtonColor: '#7c3aed' });
+      }
+    } finally {
+      setCargando(false);
     }
   };
 
@@ -68,8 +94,8 @@ export default function PaginaLoginAdmin() {
             </div>
 
             <div className="pt-2">
-              <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-white font-bold py-6 rounded-full text-xs tracking-[0.2em] shadow-md hover:shadow-lg transition-all active:scale-95 uppercase">
-                Iniciar Sesión
+              <Button type="submit" disabled={cargando} className="w-full bg-primary hover:bg-primary/90 text-white font-bold py-6 rounded-full text-xs tracking-[0.2em] shadow-md hover:shadow-lg transition-all active:scale-95 uppercase">
+                {cargando ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Iniciar Sesión'}
               </Button>
             </div>
           </form>

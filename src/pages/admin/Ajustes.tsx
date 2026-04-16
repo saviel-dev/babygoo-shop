@@ -1,31 +1,40 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { obtenerConfiguracion, guardarConfiguracion, obtenerCategorias, agregarCategoria, editarCategoria, eliminarCategoria, obtenerBanners, guardarBanners, validarPasswordActual, cambiarPasswordAdmin } from '@/store';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Pencil, Trash2, Tag, ChevronLeft, ChevronRight, X, Image as ImageIcon, Lock, KeyRound } from 'lucide-react';
+import { Plus, Pencil, Trash2, Tag, ChevronLeft, ChevronRight, Image as ImageIcon, Lock, KeyRound, Loader2, RefreshCw } from 'lucide-react';
 import { Banner } from '@/types';
 import Swal from 'sweetalert2';
+import { useCategorias } from '@/hooks/useCategorias';
+import { useBanners } from '@/hooks/useBanners';
+import { useConfiguracion } from '@/hooks/useConfiguracion';
+import { supabase } from '@/lib/supabase';
+import { BANNER_COLORES, getFondoBanner } from '@/lib/bannerColores';
 
 const POR_PAGINA = 6;
 
 export default function PaginaAjustes() {
   const { toast } = useToast();
-  const [config, setConfig] = useState(obtenerConfiguracion());
+  const { config: configDB, guardarConfiguracion, cargando: cargandoConfig, recargar: recargarConfig } = useConfiguracion();
+  const [config, setConfig] = useState(configDB);
+
+  // Sync config when it loads from Supabase
+  useEffect(() => { setConfig(configDB); }, [configDB]);
 
   // ── Categorías ──
-  const [categorias, setCategorias] = useState<string[]>(() => obtenerCategorias());
+  const { categorias, agregarCategoria, editarCategoria, eliminarCategoria, recargar: recargarCat } = useCategorias();
   const [pagina, setPagina] = useState(0);
   const [modalCat, setModalCat] = useState(false);
   const [editandoCat, setEditandoCat] = useState<string | null>(null);
   const [inputCat, setInputCat] = useState('');
 
   // ── Banners ──
-  const [banners, setBanners] = useState<Banner[]>(() => obtenerBanners());
+  const { banners, crearBanner, actualizarBanner, eliminarBanner, recargar: recargarBanners } = useBanners();
   const [modalBanner, setModalBanner] = useState(false);
   const [editandoBanner, setEditandoBanner] = useState<Banner | null>(null);
   const bannerVacio = { titulo: '', subtitulo: '', color: 'from-primary/90 to-secondary/80' };
@@ -35,11 +44,15 @@ export default function PaginaAjustes() {
   const [pwdActual, setPwdActual] = useState('');
   const [pwdNueva, setPwdNueva] = useState('');
   const [pwdConfirma, setPwdConfirma] = useState('');
+  const [mostrarPwd, setMostrarPwd] = useState(false);
+
+  // ── Estados de carga ──
+  const [guardandoConfig, setGuardandoConfig] = useState(false);
+  const [guardandoPwd, setGuardandoPwd] = useState(false);
+  const [guardandoBanner, setGuardandoBanner] = useState(false);
 
   const totalPaginas = Math.ceil(categorias.length / POR_PAGINA);
   const catPagina = categorias.slice(pagina * POR_PAGINA, (pagina + 1) * POR_PAGINA);
-
-  const refrescarCats = () => setCategorias(obtenerCategorias());
 
   const abrirCrear = () => {
     setEditandoCat(null);
@@ -53,28 +66,25 @@ export default function PaginaAjustes() {
     setModalCat(true);
   };
 
-  const guardarCat = () => {
+  const guardarCat = async () => {
     const val = inputCat.trim();
     if (!val) {
       Swal.fire({ title: 'Campo requerido', text: 'El nombre de la categoría no puede estar vacío.', icon: 'warning', confirmButtonColor: '#7c3aed' });
       return;
     }
     if (editandoCat) {
-      const ok = editarCategoria(editandoCat, val);
-      if (!ok) {
-        Swal.fire({ title: 'Duplicado', text: 'Ya existe una categoría con ese nombre.', icon: 'warning', confirmButtonColor: '#7c3aed' });
-        return;
+      const res = await editarCategoria(editandoCat, val);
+      if (res.error) {
+        Swal.fire({ title: 'Error', text: res.error, icon: 'warning', confirmButtonColor: '#7c3aed' }); return;
       }
       toast({ title: 'Categoría actualizada' });
     } else {
-      const ok = agregarCategoria(val);
-      if (!ok) {
-        Swal.fire({ title: 'Duplicado', text: 'Ya existe una categoría con ese nombre.', icon: 'warning', confirmButtonColor: '#7c3aed' });
-        return;
+      const res = await agregarCategoria(val);
+      if (res.error) {
+        Swal.fire({ title: 'Error', text: res.error, icon: 'warning', confirmButtonColor: '#7c3aed' }); return;
       }
       toast({ title: 'Categoría creada' });
     }
-    refrescarCats();
     setModalCat(false);
   };
 
@@ -90,17 +100,13 @@ export default function PaginaAjustes() {
       cancelButtonText: 'Cancelar',
     });
     if (!result.isConfirmed) return;
-    eliminarCategoria(cat);
-    refrescarCats();
-    // Adjust page if we deleted last item on page
+    await eliminarCategoria(cat);
     const newTotal = Math.ceil((categorias.length - 1) / POR_PAGINA);
     if (pagina >= newTotal && newTotal > 0) setPagina(newTotal - 1);
     toast({ title: 'Categoría eliminada' });
   };
 
   // --- Helpers de Banners ---
-  const refrescarBanners = () => setBanners(obtenerBanners());
-
   const abrirCrearBanner = () => {
     if (banners.length >= 3) {
       Swal.fire({ title: 'Límite alcanzado', text: 'Solo puedes tener 3 banners activos.', icon: 'info', confirmButtonColor: '#7c3aed' });
@@ -117,22 +123,24 @@ export default function PaginaAjustes() {
     setModalBanner(true);
   };
 
-  const guardarBanner = () => {
+  const guardarBanner = async () => {
     if (!formBanner.titulo.trim() || !formBanner.color.trim()) {
       Swal.fire({ title: 'Campos requeridos', text: 'El título y el color son obligatorios.', icon: 'warning', confirmButtonColor: '#7c3aed' });
       return;
     }
-
-    let nuevos = [...banners];
+    setGuardandoBanner(true);
+    let res;
     if (editandoBanner) {
-      nuevos = nuevos.map(b => b.id === editandoBanner.id ? { ...formBanner, id: b.id } : b);
-      toast({ title: 'Banner actualizado' });
+      res = await actualizarBanner(editandoBanner.id, formBanner);
     } else {
-      nuevos.push({ ...formBanner, id: crypto.randomUUID() });
-      toast({ title: 'Banner creado' });
+      res = await crearBanner(formBanner);
     }
-    guardarBanners(nuevos);
-    refrescarBanners();
+    setGuardandoBanner(false);
+    if (res?.error) {
+      Swal.fire({ title: 'Error', text: res.error || 'No se pudo guardar el banner.', icon: 'error', confirmButtonColor: '#7c3aed' });
+      return;
+    }
+    toast({ title: editandoBanner ? 'Banner actualizado' : 'Banner creado' });
     setModalBanner(false);
   };
 
@@ -146,25 +154,25 @@ export default function PaginaAjustes() {
       confirmButtonText: 'Sí, eliminar',
     });
     if (result.isConfirmed) {
-      const nuevos = banners.filter(b => b.id !== id);
-      guardarBanners(nuevos);
-      refrescarBanners();
+      await eliminarBanner(id);
       toast({ title: 'Banner eliminado' });
     }
   };
 
-  const guardar = () => {
-    guardarConfiguracion(config);
-    toast({ title: 'Configuración guardada' });
-  };
-
-  const guardarPassword = () => {
-    if (!pwdActual || !pwdNueva || !pwdConfirma) {
-      Swal.fire({ title: 'Campos incompletos', text: 'Por favor llena todos los campos.', icon: 'warning', confirmButtonColor: '#7c3aed' });
+  const guardar = async () => {
+    setGuardandoConfig(true);
+    const res = await guardarConfiguracion(config);
+    setGuardandoConfig(false);
+    if (res?.error) {
+      Swal.fire({ title: 'Error', text: 'No se pudo guardar la configuración. Verifica tu conexión.', icon: 'error', confirmButtonColor: '#7c3aed' });
       return;
     }
-    if (!validarPasswordActual(pwdActual)) {
-      Swal.fire({ title: 'Contraseña incorrecta', text: 'La contraseña actual no es correcta.', icon: 'error', confirmButtonColor: '#ef4444' });
+    toast({ title: '¡Configuración guardada!' });
+  };
+
+  const guardarPassword = async () => {
+    if (!pwdActual || !pwdNueva || !pwdConfirma) {
+      Swal.fire({ title: 'Campos incompletos', text: 'Por favor llena todos los campos.', icon: 'warning', confirmButtonColor: '#7c3aed' });
       return;
     }
     if (pwdNueva !== pwdConfirma) {
@@ -175,17 +183,47 @@ export default function PaginaAjustes() {
       Swal.fire({ title: 'Contraseña corta', text: 'La nueva contraseña debe tener al menos 6 caracteres.', icon: 'warning', confirmButtonColor: '#7c3aed' });
       return;
     }
-
-    cambiarPasswordAdmin(pwdNueva);
+    setGuardandoPwd(true);
+    const { data, error } = await supabase.from('admin_credenciales').select('clave').eq('id', 1).single();
+    if (error || !data || (data as { clave: string }).clave !== pwdActual) {
+      setGuardandoPwd(false);
+      Swal.fire({ title: 'Contraseña incorrecta', text: 'La contraseña actual no es correcta.', icon: 'error', confirmButtonColor: '#ef4444' });
+      return;
+    }
+    const { error: updateError } = await supabase.from('admin_credenciales').update({ clave: pwdNueva }).eq('id', 1);
+    setGuardandoPwd(false);
+    if (updateError) {
+      Swal.fire({ title: 'Error', text: 'No se pudo actualizar la contraseña. Intenta de nuevo.', icon: 'error', confirmButtonColor: '#7c3aed' });
+      return;
+    }
     Swal.fire({ title: '¡Éxito!', text: 'Contraseña actualizada correctamente.', icon: 'success', confirmButtonColor: '#10b981' });
-    setPwdActual('');
-    setPwdNueva('');
-    setPwdConfirma('');
+    setPwdActual(''); setPwdNueva(''); setPwdConfirma('');
   };
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Ajustes</h1>
+      {cargandoConfig && (
+        <div className="flex justify-center p-20"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
+      )}
+      {!cargandoConfig && (
+      <>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Ajustes</h1>
+        <Button 
+          variant="outline" 
+          size="icon" 
+          title="Actualizar datos"
+          onClick={() => { 
+            recargarConfig(); 
+            recargarCat(); 
+            recargarBanners(); 
+            toast({ title: "Datos actualizados", description: "La configuración se ha sincronizado con el servidor." });
+          }}
+          className="text-slate-500 hover:text-primary hover:bg-orange-50 hover:border-orange-200 transition-all duration-300 hover:scale-110 active:scale-90 shadow-sm group"
+        >
+          <RefreshCw className="h-4 w-4 group-hover:rotate-180 transition-transform duration-500" />
+        </Button>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
         {/* ── COLUMNA IZQUIERDA ── */}
@@ -236,7 +274,9 @@ export default function PaginaAjustes() {
                 <Input value={config.mensajeBienvenida} onChange={e => setConfig({ ...config, mensajeBienvenida: e.target.value })} />
               </div>
             </div>
-            <Button onClick={guardar}>Guardar Cambios</Button>
+            <Button onClick={guardar} disabled={guardandoConfig}>
+              {guardandoConfig ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Guardando...</> : 'Guardar Cambios'}
+            </Button>
           </CardContent>
         </Card>
 
@@ -255,21 +295,34 @@ export default function PaginaAjustes() {
                 <Label>Contraseña Actual</Label>
                 <div className="relative">
                   <KeyRound className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <Input type="password" value={pwdActual} onChange={e => setPwdActual(e.target.value)} className="pl-9" placeholder="Ingresa tu contraseña actual" />
+                  <Input type={mostrarPwd ? "text" : "password"} value={pwdActual} onChange={e => setPwdActual(e.target.value)} className="pl-9" placeholder="Ingresa tu contraseña actual" />
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Nueva Contraseña</Label>
-                  <Input type="password" value={pwdNueva} onChange={e => setPwdNueva(e.target.value)} placeholder="Al menos 6 caracteres" />
+                  <Input type={mostrarPwd ? "text" : "password"} value={pwdNueva} onChange={e => setPwdNueva(e.target.value)} placeholder="Al menos 6 caracteres" />
                 </div>
                 <div className="space-y-2">
                   <Label>Confirmar Contraseña</Label>
-                  <Input type="password" value={pwdConfirma} onChange={e => setPwdConfirma(e.target.value)} placeholder="Repite la contraseña" />
+                  <Input type={mostrarPwd ? "text" : "password"} value={pwdConfirma} onChange={e => setPwdConfirma(e.target.value)} placeholder="Repite la contraseña" />
                 </div>
               </div>
+
+              <div className="flex items-center gap-2 mb-2">
+                <Checkbox 
+                  id="mostrar-pwd" 
+                  checked={mostrarPwd} 
+                  onCheckedChange={(checked) => setMostrarPwd(!!checked)} 
+                />
+                <Label htmlFor="mostrar-pwd" className="text-sm font-medium cursor-pointer">
+                  Mostrar contraseñas
+                </Label>
+              </div>
               
-              <Button onClick={guardarPassword} variant="default" className="w-full sm:w-auto bg-slate-800 hover:bg-slate-700">Actualizar Contraseña</Button>
+              <Button onClick={guardarPassword} variant="default" className="w-full sm:w-auto bg-slate-800 hover:bg-slate-700" disabled={guardandoPwd}>
+                {guardandoPwd ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Verificando...</> : 'Actualizar Contraseña'}
+              </Button>
           </CardContent>
         </Card>
         </div>
@@ -496,36 +549,48 @@ export default function PaginaAjustes() {
               />
             </div>
             <div className="space-y-2">
-              <Label className="text-sm font-semibold text-slate-700">Fondo CSS (Clases de Tailwind)</Label>
+              <Label className="text-sm font-semibold text-slate-700">Color del Fondo</Label>
               <Select value={formBanner.color} onValueChange={v => setFormBanner({ ...formBanner, color: v })}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="from-primary/90 to-secondary/80">Morado a Naranja</SelectItem>
-                  <SelectItem value="from-secondary/90 to-primary/80">Naranja a Morado</SelectItem>
-                  <SelectItem value="from-emerald-500 to-teal-400">Verde Esmeralda</SelectItem>
-                  <SelectItem value="from-blue-600 to-cyan-400">Azul Océano</SelectItem>
-                  <SelectItem value="from-rose-500 to-pink-400">Rosa Neón</SelectItem>
-                  <SelectItem value="bg-slate-800">Gris Oscuro Sólido</SelectItem>
+                  {Object.entries(BANNER_COLORES).map(([key, info]) => (
+                    <SelectItem key={key} value={key}>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="inline-block w-4 h-4 rounded-full shrink-0 border border-white/20"
+                          style={info.style}
+                        />
+                        {info.label}
+                      </div>
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
             {/* Preview Banner */}
-            <div className={`mt-2 rounded-lg p-4 bg-gradient-to-r text-white text-center ${formBanner.color}`}>
+            <div
+              className="mt-2 rounded-lg p-4 text-white text-center"
+              style={getFondoBanner(formBanner.color)}
+            >
                <h4 className="font-bold">{formBanner.titulo || 'Título aquí'}</h4>
                <p className="text-xs opacity-90">{formBanner.subtitulo || 'Subtítulo aquí'}</p>
             </div>
 
             <div className="flex gap-2 pt-2">
-              <Button variant="outline" className="flex-1 font-semibold text-slate-600" onClick={() => setModalBanner(false)}>Cancelar</Button>
-              <Button className="flex-1 font-bold gap-1.5" onClick={guardarBanner}>
-                {editandoBanner ? <><Pencil className="w-3.5 h-3.5" /> Guardar Cambios</> : <><Plus className="w-3.5 h-3.5" /> Crear Banner</>}
+              <Button variant="outline" className="flex-1 font-semibold text-slate-600" onClick={() => setModalBanner(false)} disabled={guardandoBanner}>Cancelar</Button>
+              <Button className="flex-1 font-bold gap-1.5" onClick={guardarBanner} disabled={guardandoBanner}>
+                {guardandoBanner
+                  ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> {editandoBanner ? 'Guardando...' : 'Creando...'}</>
+                  : editandoBanner ? <><Pencil className="w-3.5 h-3.5" /> Guardar Cambios</> : <><Plus className="w-3.5 h-3.5" /> Crear Banner</>}
               </Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
+      </>
+      )}
     </div>
   );
 }

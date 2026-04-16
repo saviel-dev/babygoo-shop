@@ -2,13 +2,21 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Package, ShoppingBag, TrendingUp, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { obtenerProductos, obtenerPedidos, obtenerActividad } from '@/store';
+import { useProductos } from '@/hooks/useProductos';
+import { usePedidos } from '@/hooks/usePedidos';
+import { useActividad } from '@/hooks/useActividad';
+import { Loader2 } from 'lucide-react';
 
 export default function PaginaDashboard() {
   const navigate = useNavigate();
-  const productos = obtenerProductos();
-  const pedidos = obtenerPedidos();
-  const actividad = obtenerActividad().slice(0, 8);
+  const { productos, cargando: c1 } = useProductos();
+  const { pedidos, cargando: c2 } = usePedidos();
+  const { actividad, cargando: c3 } = useActividad();
+
+  if (c1 || c2 || c3) {
+    return <div className="flex justify-center p-20"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
+  }
+
 
   const stats = [
     { label: 'Total Productos', valor: productos.length, icono: Package, color: 'bg-primary' },

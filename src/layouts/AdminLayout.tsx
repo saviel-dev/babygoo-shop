@@ -1,5 +1,9 @@
 import { Navigate, Outlet, useLocation, Link } from 'react-router-dom';
-import { estaAutenticadoAdmin, logoutAdmin } from '@/store';
+// Auth helpers are now Supabase-backed (defined in LoginAdmin.tsx)
+const ADMIN_AUTH_KEY = 'babygoo_admin_auth';
+function estaAutenticadoAdmin() { return localStorage.getItem(ADMIN_AUTH_KEY) === 'true'; }
+function logoutAdmin() { localStorage.removeItem(ADMIN_AUTH_KEY); }
+
 import { Home, Package, ShoppingBag, Settings, LogOut, ShoppingCart } from 'lucide-react';
 import { useState } from 'react';
 import { Menu, X } from 'lucide-react';

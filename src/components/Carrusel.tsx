@@ -1,17 +1,12 @@
 import { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-
-import { obtenerBanners } from '@/store';
-import { Banner } from '@/types';
+import { useBanners } from '@/hooks/useBanners';
+import { getFondoBanner } from '@/lib/bannerColores';
 
 export function Carrusel() {
+  const { banners } = useBanners();
   const [actual, setActual] = useState(0);
-  const [banners, setBanners] = useState<Banner[]>([]);
-
-  useEffect(() => {
-    setBanners(obtenerBanners());
-  }, []);
 
   useEffect(() => {
     if (banners.length === 0) return;
@@ -30,7 +25,8 @@ export function Carrusel() {
         {banners.map(banner => (
           <div
             key={banner.id}
-            className={`w-full shrink-0 bg-gradient-to-r ${banner.color} text-white py-16 sm:py-24 px-8 sm:px-16 flex flex-col items-center justify-center text-center`}
+            className="w-full shrink-0 text-white py-16 sm:py-24 px-8 sm:px-16 flex flex-col items-center justify-center text-center"
+            style={getFondoBanner(banner.color)}
           >
             <h2 className="text-2xl sm:text-4xl font-bold mb-2">{banner.titulo}</h2>
             <p className="text-sm sm:text-lg opacity-90">{banner.subtitulo}</p>

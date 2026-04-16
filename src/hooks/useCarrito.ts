@@ -6,11 +6,12 @@ import {
   eliminarDelCarrito,
   actualizarCantidadCarrito,
   vaciarCarrito,
-  obtenerProductoPorId,
 } from '@/store';
+import { useProductos } from '@/hooks/useProductos';
 
 export function useCarrito() {
   const [items, setItems] = useState<ItemCarrito[]>(obtenerCarrito());
+  const { productosPorId } = useProductos();
 
   const refrescar = useCallback(() => {
     setItems(obtenerCarrito());
@@ -40,10 +41,10 @@ export function useCarrito() {
 
   const totalPrecio = useMemo(() => {
     return items.reduce((sum, item) => {
-      const prod = obtenerProductoPorId(item.productoId);
+      const prod = productosPorId(item.productoId);
       return sum + (prod ? prod.precio * item.cantidad : 0);
     }, 0);
-  }, [items]);
+  }, [items, productosPorId]);
 
   return { items, agregar, eliminar, actualizar, vaciar, totalItems, totalPrecio, refrescar };
 }
